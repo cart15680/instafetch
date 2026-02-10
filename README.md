@@ -95,21 +95,20 @@ The production server will run on [http://localhost:3000](http://localhost:3000)
 
 ## 🌐 Deployment
 
-### Vercel (Recommended)
+### AWS Amplify (Recommended)
 
-1. Push your code to GitHub
-2. Import project to [Vercel](https://vercel.com)
-3. Deploy with one click
+1. Connect your GitHub repository to [AWS Amplify Console](https://console.aws.amazon.com/amplify).
+2. Amplify will automatically detect Next.js and use the provided `amplify.yml`.
+3. Click "Save and Deploy".
 
 ### Other Platforms
 
 INSTAFETCH can be deployed to any platform that supports Next.js:
 
-- **Netlify**: Set build command to `npm run build` and publish directory to `.next`
-- **Railway**: Automatically detects Next.js
-- **Digital Ocean App Platform**: Supports Next.js out of the box
-- **AWS Amplify**: Use Next.js preset
-- **Self-hosted**: Run `npm run build` then `npm run start`
+- **Vercel**: Import project and deploy with one click.
+- **Netlify**: Set build command to `npm run build` and publish directory to `.next`.
+- **Railway**: Automatically detects Next.js.
+- **Self-hosted**: Run `npm run build` then `npm run start`.
 
 ---
 

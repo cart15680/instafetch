@@ -1,6 +1,4 @@
 import { NextRequest, NextResponse } from "next/server";
-
-export const runtime = "edge";
 import type { InstagramGraphQLResponse } from "@/types/instagram";
 
 // Extract shortcode from Instagram URL
