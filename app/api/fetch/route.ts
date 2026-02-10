@@ -38,70 +38,74 @@ export async function POST(request: NextRequest) {
             );
         }
 
-        // Method: Use the Embed endpoint which is less restricted on Cloud IPs
-        const embedUrl = `https://www.instagram.com/p/${shortcode}/embed/captioned/`;
+        // We try the Embed page as it's the most reliable on Cloud IPs
+        const targetUrl = `https://www.instagram.com/p/${shortcode}/embed/captioned/`;
 
-        const response = await fetch(embedUrl, {
+        const response = await fetch(targetUrl, {
             headers: {
-                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/123.0.0.0 Safari/537.36",
-                "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8",
-                "Accept-Language": "en-US,en;q=0.5",
+                "User-Agent": "Mozilla/5.0 (iPhone; CPU iPhone OS 16_6 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/16.6 Mobile/15E148 Safari/604.1",
+                "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+                "Accept-Language": "en-US,en;q=0.9",
             },
         });
 
         if (!response.ok) {
-            throw new Error(`Instagram Embed returned ${response.status}`);
+            throw new Error(`Instagram returned ${response.status}`);
         }
 
         const html = await response.text();
 
-        // Extract the JSON data from the embed HTML
-        const videoUrlMatch = html.match(/"video_url":"([^"]+)"/);
-        const displayUrlMatch = html.match(/"display_url":"([^"]+)"/);
-        const captionMatch = html.match(/"caption":"([^"]+)"/);
+        // --- EXTRACTION STRATEGY 1: Embed JSON Data ---
+        let videoUrl = html.match(/"video_url":"([^"]+)"/)?.[1];
+        let thumbnailUrl = html.match(/"display_url":"([^"]+)"/)?.[1];
+        let captionText = html.match(/"caption":"([^"]+)"/)?.[1];
 
-        if (!videoUrlMatch) {
+        // --- EXTRACTION STRATEGY 2: Meta Tags ---
+        if (!videoUrl) {
+            videoUrl = html.match(/property="og:video" content="([^"]+)"/)?.[1];
+            thumbnailUrl = thumbnailUrl || html.match(/property="og:image" content="([^"]+)"/)?.[1];
+        }
+
+        if (!videoUrl) {
+            if (html.includes("login") || html.includes("challenge")) {
+                return NextResponse.json(
+                    { success: false, error: "Instagram restricted this request on the server. Try again in a minute." },
+                    { status: 403 }
+                );
+            }
+
             return NextResponse.json(
-                {
-                    success: false,
-                    error: "Could not find video. This post might be private, deleted, or an image."
-                },
+                { success: false, error: "Could not find video. Ensure the post is Public and try another link." },
                 { status: 404 }
             );
         }
 
-        // Clean the extracted URLs
-        const videoUrl = videoUrlMatch[1].replace(/\\u0026/g, "&");
-        const thumbnailUrl = displayUrlMatch ? displayUrlMatch[1].replace(/\\u0026/g, "&") : "";
+        // Clean URLs
+        const cleanVideoUrl = videoUrl.replace(/\\u0026/g, "&");
+        const cleanThumbnailUrl = (thumbnailUrl || "").replace(/\\u0026/g, "&");
 
         let title = "Instagram Video";
-        if (captionMatch) {
+        if (captionText) {
             try {
-                title = JSON.parse(`"${captionMatch[1]}"`).slice(0, 100);
+                title = JSON.parse(`"${captionText}"`).slice(0, 100);
             } catch {
-                title = captionMatch[1].slice(0, 100);
+                title = captionText.slice(0, 100);
             }
         }
 
         return NextResponse.json({
             success: true,
             data: {
-                videoUrl: videoUrl,
-                thumbnailUrl: thumbnailUrl,
+                videoUrl: cleanVideoUrl,
+                thumbnailUrl: cleanThumbnailUrl,
                 title: title,
-                dimensions: {
-                    width: 1080,
-                    height: 1920,
-                },
+                dimensions: { width: 1080, height: 1920 },
             },
         });
     } catch (error: unknown) {
         console.error("Scraper Error:", error);
         return NextResponse.json(
-            {
-                success: false,
-                error: "Instagram is temporarily blocking the server. Please try again soon.",
-            },
+            { success: false, error: "Connection lost. Please try again soon." },
             { status: 500 }
         );
     }
