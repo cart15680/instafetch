@@ -1,4 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
+
+export const runtime = "edge";
 import type { InstagramGraphQLResponse } from "@/types/instagram";
 
 // Extract shortcode from Instagram URL
@@ -20,35 +22,6 @@ function extractShortcode(url: string): string | null {
     }
 }
 
-// Build Instagram GraphQL request
-function buildGraphQLRequest(shortcode: string) {
-    const body = new URLSearchParams({
-        variables: JSON.stringify({
-            shortcode: shortcode,
-            fetch_tagged_user_count: null,
-            hoisted_comment_id: null,
-            hoisted_reply_id: null,
-        }),
-        doc_id: "8845758582119845", // Standard ID for post data
-    });
-
-    return {
-        url: "https://www.instagram.com/graphql/query",
-        headers: {
-            "User-Agent":
-                "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/123.0.0.0 Safari/537.36",
-            Accept: "*/*",
-            "Content-Type": "application/x-www-form-urlencoded",
-            "X-IG-App-ID": "1217981644879628", // Essential for the web API
-            "X-Requested-With": "XMLHttpRequest",
-            "X-ASBD-ID": "129477",
-            "Origin": "https://www.instagram.com",
-            "Sec-Fetch-Site": "same-origin",
-        },
-        body: body.toString(),
-    };
-}
-
 export async function POST(request: NextRequest) {
     try {
         const { url } = await request.json();
@@ -61,7 +34,6 @@ export async function POST(request: NextRequest) {
         }
 
         const shortcode = extractShortcode(url);
-
         if (!shortcode) {
             return NextResponse.json(
                 { success: false, error: "Invalid Instagram URL" },
@@ -69,76 +41,69 @@ export async function POST(request: NextRequest) {
             );
         }
 
-        const requestConfig = buildGraphQLRequest(shortcode);
+        // Method: Use the Embed endpoint which is less restricted on Cloud IPs
+        const embedUrl = `https://www.instagram.com/p/${shortcode}/embed/captioned/`;
 
-        const response = await fetch(requestConfig.url, {
-            method: "POST",
-            headers: requestConfig.headers,
-            body: requestConfig.body,
+        const response = await fetch(embedUrl, {
+            headers: {
+                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/123.0.0.0 Safari/537.36",
+                "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8",
+                "Accept-Language": "en-US,en;q=0.5",
+            },
         });
 
-        // Handle 401 or other errors by attempting a fallback if necessary
         if (!response.ok) {
-            console.error(`Instagram API error (${response.status}):`, await response.text().catch(() => "No body"));
+            throw new Error(`Instagram Embed returned ${response.status}`);
+        }
 
-            if (response.status === 401 || response.status === 403) {
-                return NextResponse.json(
-                    {
-                        success: false,
-                        error: "Instagram restricted this request on the server. Try again or try a different link."
-                    },
-                    { status: response.status }
-                );
+        const html = await response.text();
+
+        // Extract the JSON data from the embed HTML
+        const videoUrlMatch = html.match(/"video_url":"([^"]+)"/);
+        const displayUrlMatch = html.match(/"display_url":"([^"]+)"/);
+        const captionMatch = html.match(/"caption":"([^"]+)"/);
+
+        if (!videoUrlMatch) {
+            return NextResponse.json(
+                {
+                    success: false,
+                    error: "Could not find video. This post might be private, deleted, or an image."
+                },
+                { status: 404 }
+            );
+        }
+
+        // Clean the extracted URLs
+        const videoUrl = videoUrlMatch[1].replace(/\\u0026/g, "&");
+        const thumbnailUrl = displayUrlMatch ? displayUrlMatch[1].replace(/\\u0026/g, "&") : "";
+
+        let title = "Instagram Video";
+        if (captionMatch) {
+            try {
+                title = JSON.parse(`"${captionMatch[1]}"`).slice(0, 100);
+            } catch {
+                title = captionMatch[1].slice(0, 100);
             }
-
-            throw new Error(`Instagram API returned ${response.status}`);
         }
-
-        const data: InstagramGraphQLResponse = await response.json();
-
-        const media = data.data?.xdt_shortcode_media;
-        if (!media) {
-            return NextResponse.json(
-                { success: false, error: "Media not found. Is it a private post?" },
-                { status: 404 }
-            );
-        }
-
-        if (!media.is_video) {
-            return NextResponse.json(
-                { success: false, error: "This post is not a video" },
-                { status: 400 }
-            );
-        }
-
-        const videoUrl = media.video_url;
-        if (!videoUrl) {
-            return NextResponse.json(
-                { success: false, error: "Video URL not available" },
-                { status: 404 }
-            );
-        }
-
-        const caption = media.edge_media_to_caption?.edges[0]?.node?.text || "";
 
         return NextResponse.json({
             success: true,
             data: {
                 videoUrl: videoUrl,
-                thumbnailUrl: media.display_url,
-                title: caption.slice(0, 100) || "Instagram Video",
+                thumbnailUrl: thumbnailUrl,
+                title: title,
                 dimensions: {
-                    width: media.dimensions.width,
-                    height: media.dimensions.height,
+                    width: 1080,
+                    height: 1920,
                 },
             },
         });
     } catch (error: any) {
-        console.error("Fetch API Error:", error);
+        console.error("Scraper Error:", error);
         return NextResponse.json(
             {
                 success: false,
-                error: error.message || "Failed to fetch video data",
+                error: "Instagram is temporarily blocking the server. Please try again soon.",
             },
             { status: 500 }
         );
