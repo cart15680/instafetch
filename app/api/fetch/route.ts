@@ -58,7 +58,7 @@ export async function POST(request: NextRequest) {
         // --- EXTRACTION STRATEGY 1: Embed JSON Data ---
         let videoUrl = html.match(/"video_url":"([^"]+)"/)?.[1];
         let thumbnailUrl = html.match(/"display_url":"([^"]+)"/)?.[1];
-        let captionText = html.match(/"caption":"([^"]+)"/)?.[1];
+        const captionText = html.match(/"caption":"([^"]+)"/)?.[1];
 
         // --- EXTRACTION STRATEGY 2: Meta Tags ---
         if (!videoUrl) {
