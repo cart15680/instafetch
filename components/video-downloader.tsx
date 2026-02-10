@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { Download, Video as VideoIcon, Instagram } from "lucide-react";
+import { Download, Instagram } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { toast } from "sonner";

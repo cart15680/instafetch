@@ -1,5 +1,4 @@
 import { NextRequest, NextResponse } from "next/server";
-import type { InstagramGraphQLResponse } from "@/types/instagram";
 
 // Extract shortcode from Instagram URL
 function extractShortcode(url: string): string | null {
@@ -96,7 +95,7 @@ export async function POST(request: NextRequest) {
                 },
             },
         });
-    } catch (error: any) {
+    } catch (error: unknown) {
         console.error("Scraper Error:", error);
         return NextResponse.json(
             {

@@ -38,10 +38,11 @@ export async function GET(request: NextRequest) {
                 "Cache-Control": "public, max-age=31536000, immutable",
             },
         });
-    } catch (error: any) {
+    } catch (error: unknown) {
         console.error("Download proxy error:", error);
+        const errorMessage = error instanceof Error ? error.message : "Failed to download video";
         return NextResponse.json(
-            { error: error.message || "Failed to download video" },
+            { error: errorMessage },
             { status: 500 }
         );
     }
